@@ -23,7 +23,7 @@ class ArticleController(val showArticleUseCase: ShowArticleUseCase) {
         /**
          * 作成済記事の取得
          */
-        val createdArticle = showArticleUseCase.execute(slug).getOrElse { TODO() } // エラーハンドリングは後で実装する
+        val createdArticle = showArticleUseCase.execute(slug).getOrElse { throw ShowArticleUseCaseErrorException(it) } // エラーハンドリングは後で実装する
 
         return ResponseEntity(
             SingleArticleResponse(
@@ -37,4 +37,49 @@ class ArticleController(val showArticleUseCase: ShowArticleUseCase) {
             HttpStatus.OK
         )
     }
+
+    /**
+     * 単一記事取得ユースケースがエラーを戻したときの Exception
+     *
+     * このクラスの例外が発生したときに、@ExceptionHandler で例外処理をおこなう
+     *
+     * @property error
+     */
+    data class ShowArticleUseCaseErrorException(val error: ShowArticleUseCase.Error) : Exception()
+
+    /**
+     * ShowArticleUseCaseErrorException をハンドリングする関数
+     *
+     * ShowArticleUseCase.Error の型に合わせてレスポンスを分岐させる
+     *
+     * @param e
+     * @return
+     */
+    @ExceptionHandler(value = [ShowArticleUseCaseErrorException::class])
+    fun onShowArticleUseCaseErrorException(e: ShowArticleUseCaseErrorException): ResponseEntity<GenericErrorModel> =
+        when (val error = e.error) {
+            /**
+             * 原因: slug に該当する記事が見つからなかった
+             */
+            is ShowArticleUseCase.Error.NotFoundArticleBySlug -> ResponseEntity<GenericErrorModel>(
+                GenericErrorModel(
+                    errors = GenericErrorModelErrors(
+                        body = listOf("${error.slug} に該当する記事は見つかりませんでした")
+                    )
+                ),
+                HttpStatus.NOT_FOUND
+            )
+
+            /**
+             * 原因: バリデーションエラー
+             */
+            is ShowArticleUseCase.Error.ValidationErrors -> ResponseEntity<GenericErrorModel>(
+                GenericErrorModel(
+                    errors = GenericErrorModelErrors(
+                        body = error.errors.map { it.message }
+                    )
+                ),
+                HttpStatus.BAD_REQUEST
+            )
+        }
 }
